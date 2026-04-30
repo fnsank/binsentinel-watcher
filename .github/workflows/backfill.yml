@@ -1,16 +1,23 @@
-name: Scoop Watcher
+name: Historical Backfill
 
 on:
-  schedule:
-    - cron: '7 * * * *'
   workflow_dispatch:
+    inputs:
+      since:
+        description: Start date in YYYY-MM-DD format (inclusive). Leave empty for earliest history.
+        required: false
+        default: ''
+      until:
+        description: End date in YYYY-MM-DD format (inclusive). Leave empty for today.
+        required: false
+        default: ''
 
 concurrency:
   group: meta-write
   cancel-in-progress: false
 
 jobs:
-  watch:
+  backfill:
     runs-on: ubuntu-latest
 
     steps:
@@ -31,11 +38,30 @@ jobs:
             "https://x-access-token:${{ secrets.META_REPO_TOKEN }}@github.com/${{ secrets.META_REPO }}.git" \
             meta
 
-      - name: Run watcher
-        env:
-          GITHUB_TOKEN: ${{ secrets.SCOOP_GITHUB_TOKEN }}
-          PYTHONPATH: .
-        run: python -m watcher.check_updates meta
+      - name: Cache ScoopInstaller/Main
+        uses: actions/cache@v4
+        with:
+          path: scoop-main-cache
+          key: scoop-main-${{ github.run_id }}
+          restore-keys: |
+            scoop-main-
+
+      - name: Run historical backfill
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          args=(meta --bucket-cache scoop-main-cache)
+
+          if [ -n "${{ github.event.inputs.since }}" ]; then
+            args+=(--since "${{ github.event.inputs.since }}")
+          fi
+
+          if [ -n "${{ github.event.inputs.until }}" ]; then
+            args+=(--until "${{ github.event.inputs.until }}")
+          fi
+
+          python scripts/backfill.py "${args[@]}"
 
       - name: Push meta updates
         shell: bash
@@ -48,11 +74,11 @@ jobs:
           git add -A
 
           if git diff --staged --quiet; then
-            echo "No changes detected, skipping commit."
+            echo "No new tasks detected, skipping commit."
             exit 0
           fi
 
-          git commit -m "chore(watcher): update queue and state [skip ci]"
+          git commit -m "chore(backfill): historical tasks ${{ github.event.inputs.since }}~${{ github.event.inputs.until }} [skip ci]"
 
           for attempt in 1 2 3; do
             git fetch origin

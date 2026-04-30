@@ -21,14 +21,16 @@ def find_new_versions(known: dict[str, str], current: dict[str, str]) -> dict[st
     return {pkg: ver for pkg, ver in current.items() if known.get(pkg) != ver}
 
 
-def write_task_file(pending_dir: Path, package: str, version: str, bucket: str) -> None:
+def write_task_file(
+    pending_dir: Path, package: str, version: str, bucket: str, sha: str
+) -> None:
     task = {
         "package": package,
         "version": version,
         "bucket": bucket,
         "manifest_url": (
             f"https://raw.githubusercontent.com/ScoopInstaller/Main"
-            f"/master/bucket/{package}.json"
+            f"/{sha}/bucket/{package}.json"
         ),
         "queued_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -59,7 +61,7 @@ def run(meta_repo_path: str, token: str) -> None:
     new_versions = find_new_versions(known, changed)
 
     for pkg, ver in new_versions.items():
-        write_task_file(pending_dir, pkg, ver, "main")
+        write_task_file(pending_dir, pkg, ver, "main", head_sha)
         known[pkg] = ver
         print(f"已入队：{pkg}@{ver}")
 

@@ -4,7 +4,7 @@ import requests
 
 _HEAD_URL = "https://api.github.com/repos/ScoopInstaller/Main/git/ref/heads/master"
 _COMPARE_URL = "https://api.github.com/repos/ScoopInstaller/Main/compare/{base}...{head}"
-_RAW_URL = "https://raw.githubusercontent.com/ScoopInstaller/Main/master/bucket/{pkg}.json"
+_RAW_SHA_URL = "https://raw.githubusercontent.com/ScoopInstaller/Main/{sha}/bucket/{pkg}.json"
 
 
 def get_head_sha(token: str) -> str:
@@ -31,14 +31,14 @@ def get_changed_packages(base_sha: str, head_sha: str, token: str) -> dict[str, 
             and changed_file["status"] != "removed"
         ):
             pkg = Path(filename).stem
-            version = _fetch_manifest_version(pkg, token)
+            version = _fetch_manifest_version(pkg, head_sha, token)
             if version:
                 result[pkg] = version
     return result
 
 
-def _fetch_manifest_version(pkg: str, token: str) -> str | None:
-    resp = requests.get(_RAW_URL.format(pkg=pkg), headers=_auth_headers(token))
+def _fetch_manifest_version(pkg: str, sha: str, token: str) -> str | None:
+    resp = requests.get(_RAW_SHA_URL.format(sha=sha, pkg=pkg), headers=_auth_headers(token))
     if resp.status_code == 200:
         return resp.json().get("version")
     return None

@@ -8,8 +8,13 @@ from pathlib import Path
 def init_meta_repo(meta_path: str) -> None:
     root = Path(meta_path)
     (root / "queue" / "pending").mkdir(parents=True, exist_ok=True)
+    (root / "queue" / "processing").mkdir(parents=True, exist_ok=True)
     (root / "queue" / "done").mkdir(parents=True, exist_ok=True)
     (root / "packages").mkdir(parents=True, exist_ok=True)
+
+    processing_gitkeep = root / "queue" / "processing" / ".gitkeep"
+    if not processing_gitkeep.exists():
+        processing_gitkeep.write_text("")
 
     state_file = root / "state.json"
     if not state_file.exists():
