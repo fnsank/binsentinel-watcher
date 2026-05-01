@@ -52,11 +52,14 @@ def _normalize_state(state: dict | None) -> dict:
 def load_state(state_file: Path) -> dict:
     if not state_file.exists():
         return _default_state()
-    return _normalize_state(json.loads(state_file.read_text()))
+    return _normalize_state(json.loads(state_file.read_text(encoding="utf-8-sig")))
 
 
 def save_state(state_file: Path, state: dict) -> None:
-    state_file.write_text(json.dumps(_normalize_state(state), indent=2))
+    state_file.write_text(
+        json.dumps(_normalize_state(state), indent=2),
+        encoding="utf-8",
+    )
 
 
 def find_new_versions(known: dict[str, str], current: dict[str, str]) -> dict[str, str]:
@@ -75,7 +78,10 @@ def write_task_file(pending_dir: Path, package: str, version: str, bucket: str, 
         ),
         "queued_at": datetime.now(timezone.utc).isoformat(),
     }
-    (pending_dir / f"{package}__{version}.json").write_text(json.dumps(task, indent=2))
+    (pending_dir / f"{package}__{version}.json").write_text(
+        json.dumps(task, indent=2),
+        encoding="utf-8",
+    )
 
 
 def run(meta_repo_path: str, token: str) -> None:

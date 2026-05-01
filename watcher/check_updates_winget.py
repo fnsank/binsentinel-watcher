@@ -26,7 +26,10 @@ def write_task_file(
         "manifest_url": f"{RAW_BASE_URL}/{sha}/{manifest_path}",
         "queued_at": datetime.now(timezone.utc).isoformat(),
     }
-    (pending_dir / f"{package}__{version}.json").write_text(json.dumps(task, indent=2))
+    (pending_dir / f"{package}__{version}.json").write_text(
+        json.dumps(task, indent=2),
+        encoding="utf-8",
+    )
 
 
 def run(meta_repo_path: str, token: str) -> None:

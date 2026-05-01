@@ -28,6 +28,16 @@ class TestLoadState:
         assert result["sources"]["scoop-main"]["packages"]["git"] == "2.43.0"
         assert result["sources"]["winget"] == {"last_sha": None, "packages": {}}
 
+    def test_带utf8_bom的state也能读取(self, tmp_path):
+        f = tmp_path / "state.json"
+        f.write_text(
+            json.dumps({"last_sha": "abc", "packages": {"git": "2.43.0"}}),
+            encoding="utf-8-sig",
+        )
+        result = load_state(f)
+        assert result["sources"]["scoop-main"]["last_sha"] == "abc"
+        assert result["sources"]["scoop-main"]["packages"]["git"] == "2.43.0"
+
 
 class TestSaveState:
     def test_将state字典写入JSON文件(self, tmp_path):
