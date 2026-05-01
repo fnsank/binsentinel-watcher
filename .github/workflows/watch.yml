@@ -52,11 +52,17 @@ jobs:
             exit 0
           fi
 
+          branch="$(git branch --show-current || true)"
+          if [[ -z "$branch" ]]; then
+            branch="$(git symbolic-ref --short refs/remotes/origin/HEAD | sed 's@^origin/@@')"
+          fi
           git commit -m "chore(watcher): update queue and state [skip ci]"
 
           for attempt in 1 2 3; do
-            git fetch origin
-            if git rebase origin/main && git push; then
+            git fetch origin "refs/heads/$branch:refs/remotes/origin/$branch"
+            git rebase "origin/$branch"
+
+            if git push origin "HEAD:$branch"; then
               exit 0
             fi
 
