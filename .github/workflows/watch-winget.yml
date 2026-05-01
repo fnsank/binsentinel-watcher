@@ -31,9 +31,28 @@ jobs:
             "https://x-access-token:${{ secrets.META_REPO_TOKEN }}@github.com/${{ secrets.META_REPO }}.git" \
             meta
 
+      - name: 检查 GitHub API Token
+        shell: bash
+        env:
+          WINGET_GITHUB_TOKEN: ${{ secrets.WINGET_GITHUB_TOKEN }}
+          SCOOP_GITHUB_TOKEN: ${{ secrets.SCOOP_GITHUB_TOKEN }}
+        run: |
+          if [[ -n "${WINGET_GITHUB_TOKEN}" ]]; then
+            echo "使用 WINGET_GITHUB_TOKEN。"
+            exit 0
+          fi
+
+          if [[ -n "${SCOOP_GITHUB_TOKEN}" ]]; then
+            echo "WINGET_GITHUB_TOKEN 未配置，回退使用 SCOOP_GITHUB_TOKEN。"
+            exit 0
+          fi
+
+          echo "缺少 GitHub API token。请配置 WINGET_GITHUB_TOKEN，或复用现有 SCOOP_GITHUB_TOKEN。"
+          exit 1
+
       - name: 运行 Winget Watcher 脚本
         env:
-          GITHUB_TOKEN: ${{ secrets.WINGET_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.WINGET_GITHUB_TOKEN != '' && secrets.WINGET_GITHUB_TOKEN || secrets.SCOOP_GITHUB_TOKEN }}
           PYTHONPATH: .
         run: python -m watcher.check_updates_winget meta
 
