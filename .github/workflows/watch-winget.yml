@@ -1,0 +1,73 @@
+name: Winget Watcher
+
+on:
+  schedule:
+    - cron: '17,47 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: meta-write
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 检出 binsentinel 代码仓库
+        uses: actions/checkout@v4
+
+      - name: 配置 Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装依赖
+        run: python -m pip install -r watcher/requirements.txt
+
+      - name: 克隆元数据仓库
+        run: |
+          git clone \
+            "https://x-access-token:${{ secrets.META_REPO_TOKEN }}@github.com/${{ secrets.META_REPO }}.git" \
+            meta
+
+      - name: 运行 Winget Watcher 脚本
+        env:
+          GITHUB_TOKEN: ${{ secrets.WINGET_GITHUB_TOKEN }}
+          PYTHONPATH: .
+        run: python -m watcher.check_updates_winget meta
+
+      - name: 推送元数据变更
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cd meta
+          git config user.email "binsentinel-bot@users.noreply.github.com"
+          git config user.name "BinSentinel Bot"
+          git add -A
+
+          if git diff --staged --quiet; then
+            echo "无变更，跳过提交。"
+            exit 0
+          fi
+
+          branch="$(git branch --show-current || true)"
+          if [[ -z "$branch" ]]; then
+            branch="$(git symbolic-ref --short refs/remotes/origin/HEAD | sed 's@^origin/@@')"
+          fi
+          git commit -m "chore(winget-watcher): 更新任务队列和状态 [skip ci]"
+
+          for attempt in 1 2 3; do
+            git fetch origin "refs/heads/$branch:refs/remotes/origin/$branch"
+            git rebase "origin/$branch"
+
+            if git push origin "HEAD:$branch"; then
+              exit 0
+            fi
+
+            echo "推送与其他更新发生竞争，重试中 ($attempt/3)。"
+          done
+
+          echo "重试 3 次后仍无法推送元数据变更。"
+          exit 1

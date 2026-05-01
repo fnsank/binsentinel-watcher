@@ -12,16 +12,26 @@ def init_meta_repo(meta_path: str) -> None:
     (root / "queue" / "done").mkdir(parents=True, exist_ok=True)
     (root / "packages").mkdir(parents=True, exist_ok=True)
 
-    processing_gitkeep = root / "queue" / "processing" / ".gitkeep"
-    if not processing_gitkeep.exists():
-        processing_gitkeep.write_text("")
-
     state_file = root / "state.json"
     if not state_file.exists():
-        state_file.write_text(json.dumps({"last_sha": None, "packages": {}}, indent=2))
+        state_file.write_text(
+            json.dumps(
+                {
+                    "sources": {
+                        "scoop-main": {"last_sha": None, "packages": {}},
+                        "winget": {"last_sha": None, "packages": {}},
+                    }
+                },
+                indent=2,
+            )
+        )
         print(f"已创建 {state_file}")
     else:
         print(f"{state_file} 已存在，跳过")
+
+    gitkeep = root / "queue" / "processing" / ".gitkeep"
+    if not gitkeep.exists():
+        gitkeep.write_text("")
 
     index_file = root / "index.json"
     if not index_file.exists():
@@ -37,4 +47,3 @@ if __name__ == "__main__":
         sys.exit(1)
     init_meta_repo(sys.argv[1])
     print("完成。")
-

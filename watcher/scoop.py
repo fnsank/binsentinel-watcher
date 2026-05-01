@@ -42,4 +42,3 @@ def _fetch_manifest_version(pkg: str, sha: str, token: str) -> str | None:
     if resp.status_code == 200:
         return resp.json().get("version")
     return None
-
