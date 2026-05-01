@@ -2,8 +2,28 @@ import argparse
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 
 RAW_BASE_URL = "https://raw.githubusercontent.com/microsoft/winget-pkgs"
+
+
+def normalize_manifest_root(value: str) -> str:
+    candidate = value.strip().replace("\\", "/")
+    parsed = urlparse(candidate)
+
+    if parsed.scheme and parsed.netloc:
+        if parsed.netloc != "github.com":
+            raise ValueError(f"unsupported manifest URL host: {parsed.netloc}")
+
+        parts = [part for part in parsed.path.split("/") if part]
+        if len(parts) < 5 or parts[:3] != ["microsoft", "winget-pkgs", "tree"]:
+            raise ValueError(f"unsupported manifest URL: {value}")
+        candidate = "/".join(parts[4:])
+
+    candidate = candidate.strip("/")
+    if not candidate.startswith("manifests/"):
+        raise ValueError(f"manifest root must be under manifests/: {value}")
+    return candidate
 
 
 def is_main_manifest(path: Path) -> bool:
@@ -62,7 +82,8 @@ def write_task_file(pending_dir: Path, package_id: str, version: str, manifest_p
 
 
 def queue_manifest_root(meta_repo_path: Path, winget_repo_path: Path, manifest_root: str, sha: str) -> int:
-    package_root = winget_repo_path / Path(manifest_root)
+    normalized_manifest_root = normalize_manifest_root(manifest_root)
+    package_root = winget_repo_path / Path(normalized_manifest_root)
     pending_dir = meta_repo_path / "queue" / "pending"
     pending_dir.mkdir(parents=True, exist_ok=True)
 

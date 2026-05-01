@@ -4,13 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       manifest_root:
-        description: 'winget 目录，如 manifests/1/123/123pan 或 manifests/1/123/123pan/1.0.0'
+        description: "Winget manifest path or GitHub URL, such as manifests/1/123/123pan or https://github.com/microsoft/winget-pkgs/tree/master/manifests/1/123/123pan"
         required: true
-        default: 'manifests/1/123/123pan'
+        default: "manifests/1/123/123pan"
       ref:
-        description: 'winget-pkgs 分支或 ref'
+        description: "winget-pkgs branch or ref"
         required: false
-        default: 'master'
+        default: "master"
 
 concurrency:
   group: meta-write
@@ -21,24 +21,48 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 检出 binsentinel 代码仓库
+      - name: Checkout binsentinel repository
         uses: actions/checkout@v4
 
-      - name: 配置 Python 3.11
+      - name: Setup Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
-      - name: 安装依赖
+      - name: Install dependencies
         run: python -m pip install -r watcher/requirements.txt
 
-      - name: 克隆元数据仓库
+      - name: Normalize winget manifest input
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          raw="${{ github.event.inputs.manifest_root }}"
+          normalized="${raw//\\//}"
+          prefix="https://github.com/microsoft/winget-pkgs/tree/"
+
+          if [[ "$normalized" == "$prefix"* ]]; then
+            normalized="${normalized#"$prefix"}"
+            normalized="${normalized#*/}"
+          fi
+
+          normalized="${normalized#/}"
+          normalized="${normalized%/}"
+
+          if [[ "$normalized" != manifests/* ]]; then
+            echo "manifest_root must point under manifests/: $raw" >&2
+            exit 1
+          fi
+
+          echo "NORMALIZED_MANIFEST_ROOT=$normalized" >> "$GITHUB_ENV"
+
+      - name: Clone meta repository
         run: |
           git clone \
             "https://x-access-token:${{ secrets.META_REPO_TOKEN }}@github.com/${{ secrets.META_REPO }}.git" \
             meta
 
-      - name: 稀疏克隆目标 winget 目录
+      - name: Sparse clone target winget directory
         shell: bash
         run: |
           set -euo pipefail
@@ -48,9 +72,9 @@ jobs:
             https://github.com/microsoft/winget-pkgs.git \
             winget-pkgs
 
-          git -C winget-pkgs sparse-checkout set "${{ github.event.inputs.manifest_root }}"
+          git -C winget-pkgs sparse-checkout set "${NORMALIZED_MANIFEST_ROOT}"
 
-      - name: 扫描目录并写入任务
+      - name: Queue tasks from manifest directory
         shell: bash
         run: |
           set -euo pipefail
@@ -58,10 +82,10 @@ jobs:
           SHA="$(git -C winget-pkgs rev-parse HEAD)"
           python scripts/queue_winget_dir.py meta \
             --winget-repo-path winget-pkgs \
-            --manifest-root "${{ github.event.inputs.manifest_root }}" \
+            --manifest-root "${NORMALIZED_MANIFEST_ROOT}" \
             --sha "$SHA"
 
-      - name: 推送元数据变更
+      - name: Push meta updates
         shell: bash
         run: |
           set -euo pipefail
@@ -72,7 +96,7 @@ jobs:
           git add -A
 
           if git diff --staged --quiet; then
-            echo "无变更，跳过提交。"
+            echo "No changes detected; skipping commit."
             exit 0
           fi
 
@@ -80,7 +104,8 @@ jobs:
           if [[ -z "$branch" ]]; then
             branch="$(git symbolic-ref --short refs/remotes/origin/HEAD | sed 's@^origin/@@')"
           fi
-          git commit -m "chore(winget-manual): queue ${{ github.event.inputs.manifest_root }} [skip ci]"
+
+          git commit -m "chore(winget-manual): queue ${NORMALIZED_MANIFEST_ROOT} [skip ci]"
 
           for attempt in 1 2 3; do
             git fetch origin "refs/heads/$branch:refs/remotes/origin/$branch"
@@ -90,8 +115,8 @@ jobs:
               exit 0
             fi
 
-            echo "推送与其他更新发生竞争，重试中 ($attempt/3)。"
+            echo "Push raced with another update, retrying ($attempt/3)."
           done
 
-          echo "重试 3 次后仍无法推送元数据变更。"
+          echo "Failed to push meta updates after 3 attempts."
           exit 1

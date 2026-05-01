@@ -6,6 +6,7 @@ import pytest
 from scripts.queue_winget_dir import collect_version_dirs
 from scripts.queue_winget_dir import find_main_manifest
 from scripts.queue_winget_dir import load_existing_task_keys
+from scripts.queue_winget_dir import normalize_manifest_root
 from scripts.queue_winget_dir import queue_manifest_root
 
 
@@ -15,7 +16,7 @@ def write_manifest(path: Path, content: str = "PackageIdentifier: x\nPackageVers
 
 
 class TestCollectVersionDirs:
-    def test_包根目录返回所有版本子目录(self, tmp_path):
+    def test_returns_all_version_subdirs_for_package_root(self, tmp_path):
         root = tmp_path / "manifests" / "1" / "123" / "123pan"
         (root / "1.0.0").mkdir(parents=True)
         (root / "1.1.0").mkdir()
@@ -24,7 +25,7 @@ class TestCollectVersionDirs:
 
         assert [path.name for path in result] == ["1.0.0", "1.1.0"]
 
-    def test_单版本目录直接返回自身(self, tmp_path):
+    def test_returns_version_dir_itself_when_manifest_files_exist(self, tmp_path):
         version_dir = tmp_path / "manifests" / "1" / "123" / "123pan" / "1.0.0"
         write_manifest(version_dir / "123.123pan.yaml")
 
@@ -32,13 +33,30 @@ class TestCollectVersionDirs:
 
         assert result == [version_dir]
 
-    def test_不存在目录时报错(self, tmp_path):
+    def test_raises_when_directory_missing(self, tmp_path):
         with pytest.raises(FileNotFoundError):
             collect_version_dirs(tmp_path / "missing")
 
 
+class TestNormalizeManifestRoot:
+    def test_keeps_manifest_path(self):
+        assert normalize_manifest_root("manifests/1/123/123pan") == "manifests/1/123/123pan"
+
+    def test_normalizes_github_tree_url(self):
+        assert (
+            normalize_manifest_root(
+                "https://github.com/microsoft/winget-pkgs/tree/master/manifests/0/0-don/clippy"
+            )
+            == "manifests/0/0-don/clippy"
+        )
+
+    def test_rejects_non_manifest_path(self):
+        with pytest.raises(ValueError, match="manifests/"):
+            normalize_manifest_root("https://github.com/microsoft/winget-pkgs/tree/master/tools/foo")
+
+
 class TestFindMainManifest:
-    def test_忽略installer和locale文件(self, tmp_path):
+    def test_ignores_installer_and_locale_files(self, tmp_path):
         version_dir = tmp_path / "1.0.0"
         write_manifest(version_dir / "123.123pan.installer.yaml")
         write_manifest(version_dir / "123.123pan.locale.zh-CN.yaml")
@@ -51,7 +69,7 @@ class TestFindMainManifest:
 
 
 class TestLoadExistingTaskKeys:
-    def test_从三个队列目录收集已有任务(self, tmp_path):
+    def test_collects_existing_tasks_from_all_queue_dirs(self, tmp_path):
         for subdir in ("pending", "processing", "done"):
             task_dir = tmp_path / "queue" / subdir
             task_dir.mkdir(parents=True)
@@ -63,7 +81,7 @@ class TestLoadExistingTaskKeys:
 
 
 class TestQueueManifestRoot:
-    def test_从包根目录写入多个版本任务(self, tmp_path):
+    def test_writes_multiple_versions_from_package_root(self, tmp_path):
         meta = tmp_path / "meta"
         winget = tmp_path / "winget-pkgs"
         root = winget / "manifests" / "1" / "123" / "123pan"
@@ -84,7 +102,7 @@ class TestQueueManifestRoot:
             "manifests/1/123/123pan/1.1.0/123.123pan.yaml"
         )
 
-    def test_单版本目录输入也能写任务(self, tmp_path):
+    def test_writes_task_for_single_version_input(self, tmp_path):
         meta = tmp_path / "meta"
         winget = tmp_path / "winget-pkgs"
         version_dir = winget / "manifests" / "1" / "123" / "123pan" / "1.0.0"
@@ -95,7 +113,23 @@ class TestQueueManifestRoot:
         assert queued == 1
         assert (meta / "queue" / "pending" / "123.123pan__1.0.0.json").exists()
 
-    def test_跳过已存在任务(self, tmp_path):
+    def test_writes_task_for_github_url_input(self, tmp_path):
+        meta = tmp_path / "meta"
+        winget = tmp_path / "winget-pkgs"
+        version_dir = winget / "manifests" / "0" / "0-don" / "clippy" / "1.0.0"
+        write_manifest(version_dir / "0Don.Clippy.yaml")
+
+        queued = queue_manifest_root(
+            meta,
+            winget,
+            "https://github.com/microsoft/winget-pkgs/tree/master/manifests/0/0-don/clippy",
+            "deadbeef",
+        )
+
+        assert queued == 1
+        assert (meta / "queue" / "pending" / "0Don.Clippy__1.0.0.json").exists()
+
+    def test_skips_existing_task(self, tmp_path):
         meta = tmp_path / "meta"
         winget = tmp_path / "winget-pkgs"
         root = winget / "manifests" / "1" / "123" / "123pan"
