@@ -67,7 +67,21 @@ def find_main_manifest(version_dir: Path) -> Path | None:
     return manifests[0]
 
 
-def write_task_file(pending_dir: Path, package_id: str, version: str, manifest_path: str, sha: str) -> None:
+def extract_package_name(yaml_text: str) -> str | None:
+    for line in yaml_text.splitlines():
+        if line.startswith("PackageName:"):
+            return line.split(":", 1)[1].strip()
+    return None
+
+
+def write_task_file(
+    pending_dir: Path,
+    package_id: str,
+    version: str,
+    manifest_path: str,
+    sha: str,
+    name: str | None = None,
+) -> None:
     task = {
         "source": "winget",
         "package": package_id,
@@ -75,6 +89,8 @@ def write_task_file(pending_dir: Path, package_id: str, version: str, manifest_p
         "manifest_url": f"{RAW_BASE_URL}/{sha}/{manifest_path}",
         "queued_at": datetime.now(timezone.utc).isoformat(),
     }
+    if name:
+        task["name"] = name
     (pending_dir / f"{package_id}__{version}.json").write_text(
         json.dumps(task, indent=2),
         encoding="utf-8",
@@ -102,12 +118,14 @@ def queue_manifest_root(meta_repo_path: Path, winget_repo_path: Path, manifest_r
             print(f"跳过已存在任务：{task_key}")
             continue
 
+        name = extract_package_name(manifest.read_text(encoding="utf-8", errors="replace"))
         write_task_file(
             pending_dir,
             package_id,
             version,
             manifest.relative_to(winget_repo_path).as_posix(),
             sha,
+            name=name,
         )
         existing.add(task_key)
         queued += 1

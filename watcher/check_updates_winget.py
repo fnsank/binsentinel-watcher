@@ -4,12 +4,28 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+import requests
+
 from watcher.check_updates_scoop import find_new_versions, load_state, save_state
-from watcher.winget import get_changed_package_details, get_head_sha
+from watcher.winget import extract_package_name, get_changed_package_details, get_head_sha
 
 SOURCE_KEY = "winget"
 TASK_SOURCE = "winget"
 RAW_BASE_URL = "https://raw.githubusercontent.com/microsoft/winget-pkgs"
+
+
+def _fetch_package_name(manifest_url: str, token: str) -> str | None:
+    try:
+        resp = requests.get(
+            manifest_url,
+            headers={"Authorization": f"token {token}", "Accept": "text/plain"},
+            timeout=10,
+        )
+        if resp.ok:
+            return extract_package_name(resp.text)
+    except Exception:
+        pass
+    return None
 
 
 def write_task_file(
@@ -18,6 +34,7 @@ def write_task_file(
     version: str,
     manifest_path: str,
     sha: str,
+    name: str | None = None,
 ) -> None:
     task = {
         "source": TASK_SOURCE,
@@ -26,6 +43,8 @@ def write_task_file(
         "manifest_url": f"{RAW_BASE_URL}/{sha}/{manifest_path}",
         "queued_at": datetime.now(timezone.utc).isoformat(),
     }
+    if name:
+        task["name"] = name
     (pending_dir / f"{package}__{version}.json").write_text(
         json.dumps(task, indent=2),
         encoding="utf-8",
@@ -62,7 +81,9 @@ def run(meta_repo_path: str, token: str) -> None:
     )
 
     for package_id, version in new_versions.items():
-        write_task_file(pending_dir, package_id, version, changed[package_id]["path"], head_sha)
+        manifest_url = f"{RAW_BASE_URL}/{head_sha}/{changed[package_id]['path']}"
+        name = _fetch_package_name(manifest_url, token)
+        write_task_file(pending_dir, package_id, version, changed[package_id]["path"], head_sha, name=name)
         known[package_id] = version
         print(f"已入队：{package_id}@{version}")
 

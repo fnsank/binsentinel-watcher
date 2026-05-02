@@ -24,6 +24,20 @@ class TestWriteTaskFile:
             "https://raw.githubusercontent.com/microsoft/winget-pkgs/deadbeef/"
             "manifests/g/Git/Git/2.44.0/Git.Git.yaml"
         )
+        assert "name" not in data
+
+    def test_写入winget任务文件带name(self, tmp_path):
+        write_task_file(
+            tmp_path,
+            "Git.Git",
+            "2.44.0",
+            "manifests/g/Git/Git/2.44.0/Git.Git.yaml",
+            "deadbeef",
+            name="Git",
+        )
+
+        data = json.loads((tmp_path / "Git.Git__2.44.0.json").read_text())
+        assert data["name"] == "Git"
 
 
 class TestRun:
@@ -86,7 +100,7 @@ class TestRun:
                     "path": "manifests/g/Git/Git/2.44.0/Git.Git.yaml",
                 }
             },
-        ):
+        ), patch("watcher.check_updates_winget._fetch_package_name", return_value=None):
             run(str(meta), "token")
 
         state = json.loads((meta / "state.json").read_text())
@@ -107,3 +121,31 @@ class TestRun:
         output = capsys.readouterr().out
         assert "已入队：Git.Git@2.44.0" in output
         assert "完成。winget 共入队 1 个任务。" in output
+
+    def test_发现新版本时name写入任务(self, tmp_path):
+        meta = tmp_path / "meta"
+        (meta / "queue" / "pending").mkdir(parents=True)
+        (meta / "state.json").write_text(
+            json.dumps(
+                {
+                    "sources": {
+                        "scoop-main": {"last_sha": "scoop-sha", "packages": {}},
+                        "winget": {"last_sha": "old-sha", "packages": {}},
+                    }
+                }
+            )
+        )
+
+        with patch("watcher.check_updates_winget.get_head_sha", return_value="new-sha"), patch(
+            "watcher.check_updates_winget.get_changed_package_details",
+            return_value={
+                "0-don.clippy": {
+                    "version": "1.5.12",
+                    "path": "manifests/0/0-don/clippy/1.5.12/0-don.clippy.yaml",
+                }
+            },
+        ), patch("watcher.check_updates_winget._fetch_package_name", return_value="Clippy"):
+            run(str(meta), "token")
+
+        task = json.loads((meta / "queue" / "pending" / "0-don.clippy__1.5.12.json").read_text())
+        assert task["name"] == "Clippy"

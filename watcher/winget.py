@@ -77,3 +77,10 @@ def get_changed_packages(base_sha: str, head_sha: str, token: str) -> dict[str, 
         package_id: detail["version"]
         for package_id, detail in get_changed_package_details(base_sha, head_sha, token).items()
     }
+
+
+def extract_package_name(yaml_text: str) -> str | None:
+    for line in yaml_text.splitlines():
+        if line.startswith("PackageName:"):
+            return line.split(":", 1)[1].strip()
+    return None

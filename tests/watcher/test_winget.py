@@ -2,9 +2,24 @@ import pytest
 from unittest.mock import MagicMock, patch
 
 from watcher.winget import _parse_manifest_path
+from watcher.winget import extract_package_name
 from watcher.winget import get_changed_package_details
 from watcher.winget import get_changed_packages
 from watcher.winget import get_head_sha
+
+
+class TestExtractPackageName:
+    def test_extracts_package_name(self):
+        yaml = "PackageIdentifier: 0-don.clippy\nPackageVersion: 1.5.12\nPackageName: Clippy\n"
+        assert extract_package_name(yaml) == "Clippy"
+
+    def test_returns_none_when_missing(self):
+        yaml = "PackageIdentifier: 0-don.clippy\nPackageVersion: 1.5.12\n"
+        assert extract_package_name(yaml) is None
+
+    def test_ignores_non_leading_match(self):
+        yaml = "# PackageName: not-this\nPackageName: RealName\n"
+        assert extract_package_name(yaml) == "RealName"
 
 
 class TestGetHeadSha:

@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from scripts.queue_winget_dir import collect_version_dirs
+from scripts.queue_winget_dir import extract_package_name
 from scripts.queue_winget_dir import find_main_manifest
 from scripts.queue_winget_dir import load_existing_task_keys
 from scripts.queue_winget_dir import normalize_manifest_root
@@ -128,6 +129,31 @@ class TestQueueManifestRoot:
 
         assert queued == 1
         assert (meta / "queue" / "pending" / "0Don.Clippy__1.0.0.json").exists()
+
+    def test_writes_name_when_manifest_has_package_name(self, tmp_path):
+        meta = tmp_path / "meta"
+        winget = tmp_path / "winget-pkgs"
+        version_dir = winget / "manifests" / "0" / "0-don" / "clippy" / "1.5.12"
+        write_manifest(
+            version_dir / "0-don.clippy.yaml",
+            "PackageIdentifier: 0-don.clippy\nPackageVersion: 1.5.12\nPackageName: Clippy\n",
+        )
+
+        queue_manifest_root(meta, winget, "manifests/0/0-don/clippy/1.5.12", "abc123")
+
+        data = json.loads((meta / "queue" / "pending" / "0-don.clippy__1.5.12.json").read_text())
+        assert data["name"] == "Clippy"
+
+    def test_omits_name_when_manifest_has_no_package_name(self, tmp_path):
+        meta = tmp_path / "meta"
+        winget = tmp_path / "winget-pkgs"
+        version_dir = winget / "manifests" / "1" / "123" / "123pan" / "1.0.0"
+        write_manifest(version_dir / "123.123pan.yaml")
+
+        queue_manifest_root(meta, winget, "manifests/1/123/123pan/1.0.0", "abc123")
+
+        data = json.loads((meta / "queue" / "pending" / "123.123pan__1.0.0.json").read_text())
+        assert "name" not in data
 
     def test_skips_existing_task(self, tmp_path):
         meta = tmp_path / "meta"
