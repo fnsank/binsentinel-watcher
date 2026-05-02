@@ -84,3 +84,10 @@ def extract_package_name(yaml_text: str) -> str | None:
         if line.startswith("PackageName:"):
             return line.split(":", 1)[1].strip()
     return None
+
+
+def extract_default_locale(yaml_text: str) -> str | None:
+    for line in yaml_text.splitlines():
+        if line.startswith("DefaultLocale:"):
+            return line.split(":", 1)[1].strip()
+    return None

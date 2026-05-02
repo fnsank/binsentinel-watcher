@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from scripts.queue_winget_dir import _find_package_name
 from scripts.queue_winget_dir import collect_version_dirs
 from scripts.queue_winget_dir import extract_package_name
 from scripts.queue_winget_dir import find_main_manifest
@@ -81,6 +82,30 @@ class TestLoadExistingTaskKeys:
         assert "123.123pan__1.0.0" in result
 
 
+class TestFindPackageName:
+    def test_returns_name_from_main_manifest(self, tmp_path):
+        version_dir = tmp_path / "1.0.0"
+        main = version_dir / "Git.Git.yaml"
+        write_manifest(main, "PackageName: Git\nPackageVersion: 1.0.0\n")
+
+        assert _find_package_name(version_dir, main) == "Git"
+
+    def test_falls_back_to_locale_file_for_multi_file_manifest(self, tmp_path):
+        version_dir = tmp_path / "2.44.0"
+        main = version_dir / "Git.Git.yaml"
+        write_manifest(main, "PackageVersion: 2.44.0\nDefaultLocale: en-US\n")
+        write_manifest(version_dir / "Git.Git.locale.en-US.yaml", "PackageName: Git\nPackageLocale: en-US\n")
+
+        assert _find_package_name(version_dir, main) == "Git"
+
+    def test_returns_none_when_no_name_anywhere(self, tmp_path):
+        version_dir = tmp_path / "1.0.0"
+        main = version_dir / "Foo.Bar.yaml"
+        write_manifest(main, "PackageVersion: 1.0.0\n")
+
+        assert _find_package_name(version_dir, main) is None
+
+
 class TestQueueManifestRoot:
     def test_writes_multiple_versions_from_package_root(self, tmp_path):
         meta = tmp_path / "meta"
@@ -154,6 +179,18 @@ class TestQueueManifestRoot:
 
         data = json.loads((meta / "queue" / "pending" / "123.123pan__1.0.0.json").read_text())
         assert "name" not in data
+
+    def test_writes_name_from_locale_for_multi_file_manifest(self, tmp_path):
+        meta = tmp_path / "meta"
+        winget = tmp_path / "winget-pkgs"
+        version_dir = winget / "manifests" / "g" / "Git" / "Git" / "2.44.0"
+        write_manifest(version_dir / "Git.Git.yaml", "PackageVersion: 2.44.0\nDefaultLocale: en-US\n")
+        write_manifest(version_dir / "Git.Git.locale.en-US.yaml", "PackageName: Git\nPackageLocale: en-US\n")
+
+        queue_manifest_root(meta, winget, "manifests/g/Git/Git/2.44.0", "deadbeef")
+
+        data = json.loads((meta / "queue" / "pending" / "Git.Git__2.44.0.json").read_text())
+        assert data["name"] == "Git"
 
     def test_skips_existing_task(self, tmp_path):
         meta = tmp_path / "meta"

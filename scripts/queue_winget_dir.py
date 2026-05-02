@@ -97,6 +97,19 @@ def write_task_file(
     )
 
 
+def _find_package_name(version_dir: Path, main_manifest: Path) -> str | None:
+    text = main_manifest.read_text(encoding="utf-8", errors="replace")
+    name = extract_package_name(text)
+    if name:
+        return name
+    # Multi-file manifest: PackageName is in a locale file, not the version manifest.
+    for locale_file in sorted(version_dir.glob("*.locale.*.yaml")):
+        name = extract_package_name(locale_file.read_text(encoding="utf-8", errors="replace"))
+        if name:
+            return name
+    return None
+
+
 def queue_manifest_root(meta_repo_path: Path, winget_repo_path: Path, manifest_root: str, sha: str) -> int:
     normalized_manifest_root = normalize_manifest_root(manifest_root)
     package_root = winget_repo_path / Path(normalized_manifest_root)
@@ -118,7 +131,7 @@ def queue_manifest_root(meta_repo_path: Path, winget_repo_path: Path, manifest_r
             print(f"跳过已存在任务：{task_key}")
             continue
 
-        name = extract_package_name(manifest.read_text(encoding="utf-8", errors="replace"))
+        name = _find_package_name(version_dir, manifest)
         write_task_file(
             pending_dir,
             package_id,

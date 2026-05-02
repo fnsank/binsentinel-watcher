@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import MagicMock, patch
 
 from watcher.winget import _parse_manifest_path
+from watcher.winget import extract_default_locale
 from watcher.winget import extract_package_name
 from watcher.winget import get_changed_package_details
 from watcher.winget import get_changed_packages
@@ -20,6 +21,16 @@ class TestExtractPackageName:
     def test_ignores_non_leading_match(self):
         yaml = "# PackageName: not-this\nPackageName: RealName\n"
         assert extract_package_name(yaml) == "RealName"
+
+
+class TestExtractDefaultLocale:
+    def test_extracts_default_locale(self):
+        yaml = "PackageIdentifier: Git.Git\nPackageVersion: 2.44.0\nDefaultLocale: en-US\n"
+        assert extract_default_locale(yaml) == "en-US"
+
+    def test_returns_none_when_missing(self):
+        yaml = "PackageIdentifier: Git.Git\nPackageVersion: 2.44.0\n"
+        assert extract_default_locale(yaml) is None
 
 
 class TestGetHeadSha:

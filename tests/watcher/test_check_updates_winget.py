@@ -1,8 +1,44 @@
 import json
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
+from watcher.check_updates_winget import _fetch_package_name
 from watcher.check_updates_winget import run
 from watcher.check_updates_winget import write_task_file
+
+
+class TestFetchPackageName:
+    def _mock_resp(self, text: str, ok: bool = True) -> MagicMock:
+        m = MagicMock()
+        m.ok = ok
+        m.text = text
+        return m
+
+    def test_singleton_manifest_returns_name(self):
+        resp = self._mock_resp("PackageName: Git\nPackageVersion: 2.44.0\n")
+        with patch("watcher.check_updates_winget.requests.get", return_value=resp):
+            assert _fetch_package_name("https://raw.githubusercontent.com/x/y/sha/Git.Git.yaml", "tok") == "Git"
+
+    def test_multi_file_manifest_fetches_locale_file(self):
+        version_resp = self._mock_resp("DefaultLocale: en-US\nPackageVersion: 2.44.0\n")
+        locale_resp = self._mock_resp("PackageName: Git\nPackageLocale: en-US\n")
+        with patch("watcher.check_updates_winget.requests.get", side_effect=[version_resp, locale_resp]) as mock_get:
+            result = _fetch_package_name(
+                "https://raw.githubusercontent.com/microsoft/winget-pkgs/sha/manifests/g/Git/Git/2.44.0/Git.Git.yaml",
+                "tok",
+            )
+        assert result == "Git"
+        assert mock_get.call_count == 2
+        locale_url = mock_get.call_args_list[1].args[0]
+        assert locale_url.endswith("Git.Git.locale.en-US.yaml")
+
+    def test_returns_none_when_manifest_not_ok(self):
+        resp = self._mock_resp("", ok=False)
+        with patch("watcher.check_updates_winget.requests.get", return_value=resp):
+            assert _fetch_package_name("https://raw.githubusercontent.com/x/y/sha/Foo.yaml", "tok") is None
+
+    def test_returns_none_on_exception(self):
+        with patch("watcher.check_updates_winget.requests.get", side_effect=Exception("network")):
+            assert _fetch_package_name("https://raw.githubusercontent.com/x/y/sha/Foo.yaml", "tok") is None
 
 
 class TestWriteTaskFile:

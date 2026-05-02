@@ -7,7 +7,7 @@ from pathlib import Path
 import requests
 
 from watcher.check_updates_scoop import find_new_versions, load_state, save_state
-from watcher.winget import extract_package_name, get_changed_package_details, get_head_sha
+from watcher.winget import extract_default_locale, extract_package_name, get_changed_package_details, get_head_sha
 
 SOURCE_KEY = "winget"
 TASK_SOURCE = "winget"
@@ -15,14 +15,22 @@ RAW_BASE_URL = "https://raw.githubusercontent.com/microsoft/winget-pkgs"
 
 
 def _fetch_package_name(manifest_url: str, token: str) -> str | None:
+    headers = {"Authorization": f"token {token}", "Accept": "text/plain"}
     try:
-        resp = requests.get(
-            manifest_url,
-            headers={"Authorization": f"token {token}", "Accept": "text/plain"},
-            timeout=10,
-        )
-        if resp.ok:
-            return extract_package_name(resp.text)
+        resp = requests.get(manifest_url, headers=headers, timeout=10)
+        if not resp.ok:
+            return None
+        name = extract_package_name(resp.text)
+        if name:
+            return name
+        # Multi-file manifest: PackageName is in the defaultLocale file, not the version file.
+        locale = extract_default_locale(resp.text)
+        if not locale or not manifest_url.endswith(".yaml"):
+            return None
+        locale_url = manifest_url[:-5] + f".locale.{locale}.yaml"
+        resp2 = requests.get(locale_url, headers=headers, timeout=10)
+        if resp2.ok:
+            return extract_package_name(resp2.text)
     except Exception:
         pass
     return None
