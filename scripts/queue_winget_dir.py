@@ -6,8 +6,8 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 RAW_BASE_URL = "https://raw.githubusercontent.com/microsoft/winget-pkgs"
-# Matches locale-specific package ID suffixes like .eu, .de, .en-US, .zh-CN
-_LOCALE_PACKAGE_RE = re.compile(r"\.[a-z]{2}(-[A-Z]{2})?$")
+# Matches BCP 47 locale suffixes: 2-4 lowercase letters, optional subtag (e.g. .eu, .ach, .zh-CN, .ca-valencia)
+_LOCALE_PACKAGE_RE = re.compile(r"\.[a-z]{2,4}(-[a-zA-Z]{2,8})?$")
 
 
 def normalize_manifest_root(value: str) -> str:
@@ -37,7 +37,7 @@ def is_main_manifest(path: Path) -> bool:
         return False
     if ".locale." in name:
         return False
-    if _LOCALE_PACKAGE_RE.search(path.stem):
+    if path.stem.count(".") >= 2 and _LOCALE_PACKAGE_RE.search(path.stem):
         return False
     return True
 
