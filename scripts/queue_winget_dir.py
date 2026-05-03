@@ -1,10 +1,13 @@
 import argparse
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
 RAW_BASE_URL = "https://raw.githubusercontent.com/microsoft/winget-pkgs"
+# Matches locale-specific package ID suffixes like .eu, .de, .en-US, .zh-CN
+_LOCALE_PACKAGE_RE = re.compile(r"\.[a-z]{2}(-[A-Z]{2})?$")
 
 
 def normalize_manifest_root(value: str) -> str:
@@ -33,6 +36,8 @@ def is_main_manifest(path: Path) -> bool:
     if name.endswith(".installer.yaml"):
         return False
     if ".locale." in name:
+        return False
+    if _LOCALE_PACKAGE_RE.search(path.stem):
         return False
     return True
 

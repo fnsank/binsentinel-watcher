@@ -1,6 +1,10 @@
+import re
+
 import requests
 
 _REPO = "microsoft/winget-pkgs"
+# Matches locale-specific package ID suffixes like .eu, .de, .en-US, .zh-CN
+_LOCALE_PACKAGE_RE = re.compile(r"\.[a-z]{2}(-[A-Z]{2})?$")
 _HEAD_URL = f"https://api.github.com/repos/{_REPO}/git/ref/heads/master"
 _COMPARE_URL = f"https://api.github.com/repos/{_REPO}/compare/{{base}}...{{head}}"
 
@@ -35,6 +39,8 @@ def _parse_manifest_path(path: str) -> tuple[str | None, str | None]:
 
     package_id = filename[:-5]
     if package_id.endswith(".installer") or ".locale." in package_id:
+        return None, None
+    if _LOCALE_PACKAGE_RE.search(package_id):
         return None, None
 
     return package_id, parts[-2]
